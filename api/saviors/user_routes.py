@@ -1,60 +1,68 @@
+"""/saviors routes
+
+Endpoints only relevant to a savior of type 'users'.
+See ./routes.py for more.
+"""
+
 from api.saviors.router import bp 
 from api.helpers import savior_route
-from root.saviors.user import User
+from root.user import User
 from flask import request
-from pymongo import errors as MongoErrors
-from bson import ObjectId
-
-@bp.get("/history")
-@savior_route
-def history(savior: User):
-    """The history of a user
-    
-    This returns the products the user has requested calculations for
-    w.r.t the `limit` query param"""
-    return savior.history(limit=int(request.args.get("limit", 0)))
-
 
 @bp.post("/logs")
-@savior_route
-def log_product_emissions(savior: User) -> ObjectId:
-    """Log emissions for a user given a product.
+@savior_route(success_code=201)
+def log_product_emissions(savior: User) -> dict:
+    """POST method for /saviors/logs
     
-    This function multiplies a product's co2e amount   
-    by the POSTed value for a user"""
+    This view is only for users and handles their requested product logs
+    
+    currently partner's post logs to /saviors/files
+    
+    Expected json:
+        product_id (str): The id of the product to calculate emissions for
+        value (int): The number to multiply the product's co2e by when logging
+    
+    Returns:
+        a dictionary of the inserted log
+    """
     json = request.json 
     return savior.log_product_emissions(
         product_id=json["product_id"], 
         value=json["value"],
     )
-    
-@bp.get("/logs")
-@savior_route
-def product_logs(savior: User) -> dict[str, list | bool]:
-    args = request.args
-    limit = int(args.get("limit", 0))
-    return savior.logs(
-        limit=limit, skip=int(args.get("skip", 0))
-    )
 
 @bp.get("/stars")
 @savior_route
-def get_starred_products(savior: User) -> list:
+def get_starred_products(savior: User) -> dict:
+    """GET endpoint for /saviors/stars.
+    
+    Get a user's starred products.
+    
+    Query params:
+        limit (int): Optional. limit the length of the results. 
+            Defaults to 0.
+        skip (int): Optional. The amount of documents to skip
+            for pagination. Defaults to 0
+    
+    Returns: 
+        A list of the user's starred products.
+    """
     get_arg = request.args.get
     return savior.starred_products(
         limit=int(get_arg("limit", 0)), skip=int(get_arg("skip", 0))
     )
     
-@bp.route("/pledges", methods=["POST", "PUT"])
+@bp.get("/times-logged")
 @savior_route
-def make_pledge(savior: User) -> bool:
-    return savior.make_pledge(request.json)
-
-@bp.get("/logs/amount")
-@savior_route(error_check=KeyError, error_message="Invalid `since date`")
 def times_logged(savior: User) -> int:
-    """Get how many times a user has logged since a given date"""
-    print(request.args, "ssssss")
+    """GET method for  /saviors/times-logged
+    
+    Query params:
+        since_date (ISO string): The date to query from when counting logs
+    
+    Returns: 
+        an int of how many logs the user has made since `since_date`
+    """
     return savior.get_times_logged(
         since_date=request.args["since_date"]
     )
@@ -62,21 +70,83 @@ def times_logged(savior: User) -> int:
 @bp.post("/sprivers")
 @savior_route
 def start_spriving(savior: User) -> bool:
-    """This route will handle when a `savior` want to start saving, AKA subscribe to membership.
+    """POST method for /saviors/sprivers endpoint 
     
-    We call them saviors even if they aren't subscribed
-    because they are already putting in the effort and that is already amazing.
+    Turn a savior into spriver, aka subscribe to membership
     
-    If only everything was free right!!!
+    Returns: 
+        A boolean denoting whether the initiation was successful
     """
     return savior.start_spriving()
 
 @bp.delete("/sprivers")
 @savior_route
-def stop_spriving(savior: User):
-    """We set `spriving` to false, 
-    to know why we named it `kinda stop saving`
-    refer to `start_saving` route
-    """    
+def stop_spriving(savior: User) -> bool:
+    """DELETE method for /saviors/sprivers endpoint
     
+    Cancel a spriver's subscription
+    
+    Returns: 
+        A boolean denoting whether cancellation was successful
+    """
     return savior.stop_spriving()
+
+@bp.delete("/stars/<string:product_id>")
+@savior_route
+def delete_star(savior: User, product_id: str) -> bool:
+    """DELETE method of /stars/<product_id> endpoint
+    
+    Unstar a product
+    
+    Path args:
+        product_id (str): The product_id of the product to star
+    
+    Returns:
+        A boolean denoting if the deletion took place
+    """
+    return savior.handle_stars(product_id=product_id, delete=True)
+
+@bp.post("/stars/<string:product_id>")
+@savior_route
+def star_product(savior: User, product_id: str) -> bool:
+    """POST method of /stars/<product_id> endpoint
+    
+    Star a product
+    
+    Path args:
+        product_id (str): The id of the product to star
+    
+    Returns:
+        A boolean indicating if the starring was successful
+    """
+    return savior.handle_stars(product_id=product_id, delete=False)
+
+@bp.route("/current-pledge", methods=["POST", "PUT"])
+@savior_route
+def post_put_current_pledge(savior: User) -> bool:
+    """POST and PUT for /saviors/pledge endpoint
+
+    Create or update a user's current pledge
+    
+    Expects json containing a dictionary with fields:
+        co2e (int): The amount of co2e the user is pledging
+        frequency (Literal[day, week, year, month]): The frequency of the pledge
+        message (str): Optional. A (maybe motivating) message to document the
+            pledge with
+
+    Returns:
+        A boolean denoting if the operation was successful
+    """
+    return savior.pledge(pledge_document=request.json)
+
+@bp.delete("/current-pledge")
+@savior_route
+def delete_current_pledge(savior: User) -> bool:
+    """DELETE method for /saviors/pledge endpoint
+    
+    Set the current pledge of a user to None
+    
+    Returns:
+        A boolean indicating if the deletion was succesful
+    """
+    return savior.undo_pledge()

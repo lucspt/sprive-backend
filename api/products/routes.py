@@ -1,159 +1,201 @@
+"""/products routes
+
+CRUD endpoints for product processes.
+Text search for products.
+Etc.
+"""
+
 from api.products.router import bp 
 from flask import request
+from root.savior import Savior
 from api.helpers import savior_route, file_to_df, route
 from bson import ObjectId
-from root.saviors.partner import Partner
+from root.partner import Partner
 from typing import Literal
 from pymongo import MongoClient
 
-@bp.route("/<string:product_id>/<string:stage_name>/processes", methods=["POST"])
-@savior_route(error_message="Invalid stage name")
-def create_process(
-    savior: Partner,
+@bp.post("/<string:product_id>/<string:stage_name>/processes")
+@savior_route(success_code=201) 
+def create_process( 
+    savior: Partner, 
     product_id: str, 
     stage_name: Literal["sourcing", "assembly", "processing", "transport"]
 ) -> ObjectId:
-    """Create a new process for a product given the product id, and stage name 
-    the requested process should be created under"""
-    if stage_name not in ["sourcing", "assembly", "processing", "transport"]:
-        raise ValueError
+    
+    """POST method of /proudcts endpoint
+    
+    Create a new process for a product
+
+    Path args:
+        product_id (str): The product_id to create a process for 
+        stage_name (str): The stage to insert the process in
+        
+    Expected json data:
+        activity (str): The process activity
+        value (Number): The activity value
+        unit_type: (str): The unit type of the activity
+        unit (str): The unit of the activity
+        process (str): Optional. the process name, defaults to activity
+        
+    Returns:
+        the ObjectId of the created process
+    """
     return savior.create_product_process(
         process_data=request.json, product_id=product_id, stage=stage_name
     )
     
-@bp.route("processes/<string:process_id>", methods=["PUT", "DELETE"])
+@bp.route("processes/<string:process_id>", methods=["PUT", "PATCH"])
 @savior_route
-def handle_product_processes(savior: Partner, process_id: str):
-    method = request.method 
-    if method == "PUT":
-        return savior.update_product_process(
-            process_id=process_id, process_update=request.json
-        )
-    elif method == "DELETE":
-        return savior.delete_product_process(process_id=process_id)
+def update_product_process(savior: Partner, process_id: str) -> bool: 
+    """PUT and PATCH methods for processes/<process_id> endpoint
+    
+    Updates a product process
+    
+    Path args: 
+        process_id (str): The _id of the process to delete
+        
+    Expected json:
+        value (Number): The activity value
+        unit_type: (str): The unit type of the activity
+        unit (str): The unit of the activity
+        process (str): Optional. the process name, defaults to activity
+    
+    Returns:
+        A boolean denoting whether an update occured or not
+    """
+    return savior.update_product_process(
+        process_id=process_id, process_update=request.json
+    )
+    
+@bp.delete("/processes/<string:process_id>")
+@savior_route
+def delete_product_process(savior: Partner, process_id: str) -> bool:
+    """DELETE method for /processes/<process_id> endpoint
+    
+    Deletes a product process
+    
+    Path args: 
+        process_id (str): The _id of the process to delete
+    
+    Returns:
+        boolean denoting whether a delete was fulfilled or not
+    """
+    return savior.delete_product_process(process_id=process_id)
 
     
 @bp.post("/", strict_slashes=False)
-@savior_route(error_code=409)
-def create_product(savior: Partner):
-    """Create a product for the savior! 
-    This endpoint accepts a csv / excel sheet and a product name and does just that
+@savior_route(success_code=201)
+def create_product(savior: Partner) -> ObjectId:
+    """POST method to /products endpoint. 
+    
+    Create a product for the savior!
+    
+    Expected request.form data:
+        file: A file upload; csv or excel accepted currently
+        name (str): The product name
+    
+    Returns:
+        The ObjectId of the created product
     """
     return savior.create_product(
         product_data=file_to_df(file=request.files.get("file")),
         product_name=request.form.get("name")
     )
     
-@bp.get("/<string:id>")
+@bp.get("/<string:product_id>")
 @route(needs_db=True)
-def get_product(client: MongoClient, id: str) -> dict:
-    """Get a published product, 
-    we aggregate on products so that we can have access to the product stages
+def get_product(client: MongoClient, product_id: str) -> dict: 
+    """GET method to /products/<product_id>. 
+    
+    Get a published product
+    
+    Path args:
+        product_id (str): The _id of the product to return
+        
+    Returns:
+        A product dictionary that contains info from product to process level
     """
-    print("heyy")
-    product = client.spt.products.aggregate(
-        [
-            {"$match": {"product_id": ObjectId(id)}},
-            {
-                "$group": {
-                    "_id": "$stage",
-                    "keywords": {"$first": "$keywords"},
-                    "co2e": {"$sum": "$co2e"},
-                    "product_id": {"$first": "$product_id"},
-                    "published": {"$first": "$published"},
-                    "last_updated": {"$max": "$last_updated"},
-                    "name": {"$first": "$name"},
-                    "unit_types": {"$first": "$unit_types"},
-                    "stars": {"$first": "$stars"},
-                    "name": {"$first": "$name"},
-                    "processes": {"$push": {
-                    "_id": "$_id",
-                    "activity": "$activity",
-                    "process": "$process",
-                    "activity_unit": "$activity_unit",
-                    "activity_value": "$activity_value",
-                    "co2e": "$co2e"
-                    }}
-                }
-            },
-            {"$group": {
-                "_id": None, 
-                "stages": {
-                    "$push": {
-                        "co2e": {"$sum": "$processes.co2e"},
-                        "num_processes": {"$size": "$processes"},
-                        "stage": "$_id",
-                        "processes": "$processes",
-                        "last_updated": "$last_updated",
-                    }
-                },
-                "co2e": {"$sum": "$co2e"},
-                "unit_types": {"$first": "$unit_types"},
-                "name": {"$first": "$name"},
-                "stars": {"$first": "$stars"},
-                "last_updated": {"$first": "$last_updated"},
-                "keywords": {"$first": "$keywords"},
-                "product_id": {"$first": "$product_id"},
-            }
-            },
-        ]
+    return Partner.get_product(
+        products_collection=client.spt.products,
+        product_id=product_id,
+        matches={"published": True}
     )
-    response = product.next() if product.alive else {}
-    return response
    
 @bp.get("/", strict_slashes=False)
 @route(needs_db=True)
-def get_products(client: MongoClient) -> list:
-    """This endpoint gives access to published products, 
-    we aggregate through the emission factors collection
-    as there is no need for product stages
+def search_products(client: MongoClient) -> dict[str, bool | list]:
+    """GET method to /products.
+    
+    Text search for products collection
+    
+    Query params:
+        limit (int): How many results to return, 0 means all
+        skip (int): How many results to skip
+        q (str): The search query
+    
+    Returns: 
+        A dict with boolean field has_more, and products field
+        containing product level info
     """
-    products = client.spt.emission_factors
-    match = {"$match": {"product_id": {"$exists": True}}}
-    project =  {
-            "$project": {
-                "name": 1,
-                "co2e": 1,
-                "unit_types": 1,
-                "keywords": 1,
-                "last_updated": 1,
-                "product_id": 1,
-                "rating": 1,
-            }
+    return Savior.collection_text_search(
+        collection=client.spt.emission_factors,
+        query_params=request.args.to_dict(),
+        result_dict_field="products",
+        matches={"product_id": {"$exists": True}},
+        projections={
+            "name": 1,
+            "co2e": 1,
+            "unit_types": 1,
+            "keywords": 1,
+            "last_update": 1,
+            "product_id": 1,
+            "rating": 1,
         }
-    search_queries = request.args.to_dict()
-    sort = {"last_updated": -1}
-    if "activity" in search_queries:
-        search_queries["$text"] = {"$search": search_queries.pop("activity")}
-        project["$project"].update({"relevance": {"$meta": "textScore"}})
-        sort["relevance"] = -1
-    limit = int(search_queries.pop("limit", 0))
-    skip = int(search_queries.pop("skip", 0))
-    match["$match"].update(search_queries)
-    pipeline = [match, project, {"$sort": sort}]
-    if limit:
-        pipeline.append({"$limit": limit + 1})
-    if skip:
-        pipeline.append({"$skip": skip})
-    res = list(products.aggregate(pipeline))  
-    if limit:
-        res, has_more = res[:limit], bool(res[limit:])
-    else:
-        has_more = False
-    return {"products": res, "has_more": has_more}
+    )
 
-@bp.delete("/<string:id>")
+@bp.delete("/<string:product_id>")
 @savior_route
-def delete_product(savior: Partner, id: str) -> bool:
-    """Handle deletion of products"""
-    return savior.delete_product(product_id=id)
-
-@bp.patch("/<string:id>")
-@savior_route(error_code=409)
-def update_product(savior: Partner, id: str) -> bool:
-    """Update a product, the only editable field is the product name.
-    The rest is handle by stage / process specific endpoints.
+def delete_product(savior: Partner, product_id: str) -> bool:
+    """DELETE method to products/<product_id>
+     
+     Delete a product
+    
+    Path args:
+        product_id (str): The product_id to delete from products collection
+        
+    Returns:
+        A boolean denoting if a deletion took place
     """
-    return savior.update_product(name_update=request.json["name"], product_id=id)
+    return savior.delete_product(product_id=product_id)
+
+# @bp.delete("/<string:product_id>/stars")
+# @savior_route
+# def star_product(savior: User, product_id: str) -> bool:
+#     """DELETE method for products/<product_id>/stars.
     
+#     This view will delete a star / 'unstar' a product for a user
     
+#     Path args:
+#         product_id (str): The id of the product to unstar
+#     """
+#     return savior.handle_stars(
+#         product_id=product_id, 
+#         resource="products",
+#         delete=True
+#     )
+    
+# @bp.post("/<string:product_id>/stars")
+# @savior_route
+# def star_product(savior: User, product_id: str) -> bool:
+#     """POST method for products/<product_id>/stars.
+    
+#     This view will star a product for a user
+    
+#     Path args:
+#         product_id (str): The id of the product to unstar
+#     """
+#     return savior.handle_stars(
+#         product_id=product_id, 
+#         resource="products",
+#         delete=False
+#     )

@@ -2,12 +2,12 @@ import secrets
 from datetime import timedelta
 from flask_cors import CORS
 from flask import Flask
-from flask_mail import Mail
-from flask_jwt_extended import JWTManager    
+# from flask_mail import Mail
+from flask_jwt_extended import JWTManager  
 
 # mail = Mail()
 
-def create_app() -> Flask:
+def create_app(testing: bool = False) -> Flask:
 
     app = Flask(__name__)
     # mail.init_app(app)
@@ -43,8 +43,15 @@ def create_app() -> Flask:
     from api.products.router import bp as products_bp
     app.register_blueprint(products_bp, url_prefix="/products")
     
-    from api.main.router import bp as base_bp 
-    app.register_blueprint(base_bp, url_prefix="/")
+    from api.tasks.router import bp as tasks_bp
+    app.register_blueprint(tasks_bp, url_prefix="/tasks")
     
+    # from api.common.router import bp as common_bp
+    # app.register_blueprint(common_bp)
     
+    if testing:
+        from api.testing.router import bp as testing_bp
+        app.register_blueprint(testing_bp, url_prefix="/pytesting")
+
+        
     return app

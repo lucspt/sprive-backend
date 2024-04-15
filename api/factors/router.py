@@ -1,5 +1,5 @@
 from flask import Blueprint 
 
-bp = Blueprint("factors", __name__, url_prefix="/factors")
+bp = Blueprint("factors", __name__)
 
 import api.factors.routes

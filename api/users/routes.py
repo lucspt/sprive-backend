@@ -1,46 +1,74 @@
+"""/users routes
+
+Endpoints for logging in as a user, and creating users
+"""
+
 from api.users.router import bp
 from api.helpers import (
-    savior_route, route, login, create_account, check_email_availability, send
+    route, login, create_account, check_email_availability, send
 )
-from flask_jwt_extended import (
-    jwt_required, get_jwt_identity, create_access_token, create_refresh_token
-)
-from root.saviors.user import User
 from pymongo import MongoClient
-from flask import request 
+from flask import request, Response
 
 @bp.post("/login")
 @route(needs_db=True, send_return=False)
-def user_login(client: MongoClient):
-    """Login a user"""
+def user_login(client: MongoClient) -> Response:
+    """POST method to /users/login
+    
+    Expected json:
+        username (str): The user's username
+        password (str): The user's password
+        
+    Returns:
+        A `Response` containing the user's account if the login was successful
+        else 401 UNAUTHORIZED Response
+    """
     user = request.json
     return login(
         collection=client.spt.users,
         savior_type="users",
-        include_token=True,
-        **user
+        username_or_email=user["username"],
+        password=user["password"]
     )
 
 @bp.post("/", strict_slashes=False)
-@route(needs_db=True, send_return=False)
-def create_user(client: MongoClient):
-    """Create a new user account"""
+@route(needs_db=True, send_return=False, success_code=201)
+def create_user(client: MongoClient) -> Response:
+    """POST method to /users
+    
+    Create a user
+    
+    Expected json:
+        username (str): The account's username
+        password (str): The account's password
+        email (str): The account's email
+    Returns:
+        A Response with the user's account or a Response with the status 
+        code of 409 if a pymongo DuplicateKeyError is raised 
+        when trying to create the account
+    """
     user = request.json 
-    username, email, password = user["username"], user["email"], user["password"]
     return create_account(
-        client=client, 
+        db=client.spt, 
         savior_type="users",
-        username=username,
-        password=password,
-        email=email,
-        include_token=request.args.get("token") == "include"
+        account={
+            "username": user["username"],
+            "email": user["email"],
+            "password": user["password"],
+        },
     )
 
 @bp.get("/emails/<string:email>")
 @route(needs_db=True)
-def uniquify_emails(client: MongoClient, email: str) -> dict:
-    """This endpoint will recieve an email 
-    from a two step form that handles account creation.
-    It checks if the email is already in use"""
+def uniquify_emails(client: MongoClient, email: str) -> dict[str, bool]:
+    """GET method for /users/emails/<email>
+    
+    Check whether an email is available
+    
+    Path args:
+        email (str): The email to check availability for
+    Returns:
+        A dict with the field is_available and its boolean key
+    """
     return check_email_availability(collection=client.spt.users, email=email)
     

@@ -167,7 +167,7 @@ class GHGCalculator:
                     {"_id": ObjectId(doc.pop("_id"))}, 
                     {
                         **doc, 
-                        "created": now,
+                        "created_at": now,
                         "savior_id": savior_id,
                         "co2e": calculation["co2e"],
                         "co2e_unit": calculation["co2e_unit"],
@@ -175,7 +175,7 @@ class GHGCalculator:
                 ))
         else:
             results = [
-                {**doc,  "co2e": self(**doc)["co2e"], "created": now, "savior_id": savior_id} 
+                {**doc,  "co2e": self(**doc)["co2e"], "created_at": now, "savior_id": savior_id} 
                 for doc in data
             ]
         return results 

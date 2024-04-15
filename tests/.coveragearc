@@ -1,0 +1,5 @@
+[run]
+omit=
+  # for now just omitting these files
+  */emissions.py
+  */factors/routes.py

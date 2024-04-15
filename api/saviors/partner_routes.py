@@ -1,225 +1,286 @@
+"""/saviors routes
+
+Endpoints only relevant to a savior of type 'partners'.
+See ./routes for more.
+"""
+
 from api.saviors.router import bp 
 from api.helpers import savior_route
-from root.saviors.partner import Partner
-from flask import request, Request, Response
+from root.partner import Partner
+from flask import request, Response
 from api.helpers import send, file_to_df
-import pandas as pd
-import numpy as np 
 from bson import ObjectId
-from flask_mail import Message
-import sys 
+from datetime import datetime, timezone
 
-def handle_emissions_file(savior: Partner, request: Request) -> Response:
-    """This will upload file contents from a partner as `logs` to
-    the `logs` collection, checking and adding the information needed"""
-    file = request.files.get("file[]")
-    filename = file.filename
-    data = file_to_df(filename=filename, file=file)
-    missing_columns = []
-    for required_col in ["activity", "category", "value", "unit"]:
-        if required_col not in data:
-            missing_columns.append(required_col)
-    if len(missing_columns) > 0:
-        send(content=f"Missing required columns: {", ".join(missing_columns)}", status=400)
-    data.loc[:, "source_file"] = [
-        {"name": filename, "size": sys.getsizeof(file), "processed": False}
-    ] * len(data)
-    documents = data.replace({np.nan: None}).to_dict("records")
-    savior.handle_file_logs(file_logs=documents)
-    return send(content={"filename": file.filename}, status=200)
+@bp.delete("/logout")
+def logout() -> Response:
+    """DELETE method for /saviors/logout endpoint
+    
+    Logout of a partner's account, i.e their token cookies, NOT the tokens themselves
+    
+    Returns:
+        A `Response` with a status code of 204 if successful
+        otherwise a 500 status code with the error
+    """
+    try:
+        res = send(status=200, content=True)
+        res.set_cookie("csrf_access_token", "", expires=0)
+        res.set_cookie("access_token_cookie", "", expires=0)
+        return res
+    except Exception as e:
+        return send(
+            status=500, content="Unable to complete request", error=e
+        )
 
-@bp.route("/files/<string:file_id>", methods=["GET"])
-@bp.route("/files", methods=["GET", "POST", "PUT"])
+@bp.get("/files")
 @savior_route(send_return=False)
-def files(savior: Partner, file_id: str = None) -> list:
-    """Upload, view uploaded, and calculate the emissions of files"""
-    method = request.method 
-    if method == "GET":
-        processing_only = request.args.get("processing-only", False)
-        response = send(
-            content=savior.get_files(
-                file=file_id, processing_only=processing_only
-            ), status=200
-        )
-    elif method == "POST":
-        return handle_emissions_file(savior=savior, request=request)
-    elif method == "PUT":
-        response = send(
-            content=savior.calculate_file_emissions(request.json["data"]),
-            status=200
-        )
-    return response 
+def get_files(savior: Partner) -> Response:
+    """GET method for /saviors/files endpoint
+    
+    Retrieve a partner's files
+    
+    Returns:
+        A `Response` containing the a list of file dictionaries
+    """
+    return send(content=savior.files, status=200)
 
-@bp.route("/suppliers", methods=["GET", "POST", "PUT"])
+@bp.post("/files")
+@savior_route(send_return=False, success_code=201)
+def upload_file(savior: Partner) -> Response:
+    """POST method of /savior/files endpoint.
+    
+    Uploads an emission file. Accepted file types are: csv, excel / xls
+    
+    Note that even if there are multiple files uploaded 
+    with a list we only process the first one
+    
+    Expected request form:
+        file[]` or file (FileStorage): the file to upload
+    Returns:
+        The id of the file uploaded
+    """
+    print("HEREEE")
+    get_file = request.files.get
+    file = get_file("file[]") or get_file("file")
+    filename = file.filename
+    file_df = file_to_df(file, filename)
+    print(request.form)
+    try:
+        response, status = savior.handle_emissions_file(
+            file_df=file_df, get_form_field=request.form.get, filename=filename
+        ), 200
+    except Exception as e:
+        response, status = e, 400
+    response = send(content=response, status=status)
+    return response
+
+@bp.get("/files/<string:file_id>")
+@savior_route(send_return=False)
+def get_file(savior: Partner, file_id: str) -> Response:
+    """GET method for /saviors/files/<file_id>
+    
+    Get the logs inserted by a file when it was uploaded
+    
+    Path args:
+        file_id (str): the id of the file to retrieve
+    
+    Query params:
+        unprocessed_only: If truthy only return logs 
+            where emissions haven't been calculated
+        
+    Returns:
+        A `Response` containg a list of log dictionaries which originated from the file
+    """
+    return send(
+        content=savior.get_file_logs(
+            file_id=file_id,
+            unprocessed_only=request.args.get("unprocessed-only")
+        ), 
+        status=200
+    )
+
+@bp.get("/products")
 @savior_route
-def suppliers(savior: Partner) -> ObjectId:
-    """Get suppliers of a savior, add new suppliers"""
-    method = request.method
-    if method == "GET":
-        return savior.suppliers
-    elif request.method == "PUT":
-        return savior.add_supplier(request.json)
+def partners_products(savior: Partner) -> list:
+    """GET method for /saviors/products endpoint
+    
+    Query params:
+        `published`: If truthy, will only return published products
+    
+    Returns:
+        The requesting partners' products    
+    """
+    return savior.get_products(
+        published_only = bool(request.args.get("published"))
+    )
 
-@bp.route("/suppliers/<string:id>")
-@savior_route
-def supplier(savior: Partner, id: str) -> dict:
-    """Access to a supplier and the ability to message them"""
-
-    method = request.method 
-    if method == "GET":
-        response = savior.db.suppliers.find_one({"_id": ObjectId(id)})
-    elif method == "POST":
-        # send mail
-        supplier = None
-        msg = Message( 
-            subject="Carbon footprint management",
-            recipients=supplier["email"]
-        )
-        # from app import mail 
-        # mail.send(msg)
-    return response 
-
-@bp.get("/products/names")
+@bp.get("/product-names")
 @savior_route
 def product_names(savior: Partner) -> list:
-    """Get distinct product names. 
-    This is used to verify a product name is unique when creating one
+    """GET method to saviors/product-names endpoint
+    
+    Returns:
+        A list of the partner's distinct product names 
     """
     return savior.db.products.distinct(
-            "name", {"savior_id": savior.savior_id}
+        "name", {"savior_id": savior.savior_id}
     )
     
-@bp.route("/products/<string:id>", methods=["GET", "DELETE", "PATCH"])
+@bp.delete("/products/<string:product_id>")
 @savior_route
-def product(savior: Partner, id: str) -> dict | bool:
-    """Handles products generally,
-    since we are using references, we use `many` updates / deletions
+def delete_partner_product(savior: Partner, product_id: str) -> bool:
+    """DELETE method of /saviors/products/<product_id>
+    
+    Delete a product and all of its stages, processes
+    
+    Path args:
+        product_id (str): The product_id of the product to delete
+    
+    Returns:
+        A boolean denoting whether the deletion took place
     """
-    method = request.method 
-    if method == "GET": 
-        response = savior.get_product(product_id=id) 
-        print(response, "RESSSS")
-    elif method == "DELETE":
-        response = savior.db.products.delete_many(
-            {"product_id": id}
-        ).acknowledged
-    elif method == "PATCH":
-        update = request.json
-        name = update.get("name")
-        if name:
-            name = name.strip()
-            update["name"] = name
-            update["activity"] = name
-        kwds = update.get("keywords")
-        if kwds:
-            update["keywords"] = kwds.strip()
-        response = savior.db.products.update_many(
-            {"product_id": id}, {"$set": update}
-        ).acknowledged
-    return response
-
-# @bp.route("/products/processes", methods=["POST"])
-# @bp.route("/products/processes/<string:id>", methods=["DELETE", "POST", "PUT"])
-# @savior_route
-# def product_processes(savior: Partner, id: str | None = None) -> bool | ObjectId:
-#     """Handles product processes; the actual emission causing 
-#     aspects of products"""
-#     method = request.method
-#     if method == "DELETE":
-#         response = savior.db.products.delete_one(
-#             {"_id": ObjectId(id)}
-#         ).acknowledged
-#     elif method == "PUT": 
-#         print(id, "IDDDD")
-#         process_update = request.json 
-#         response = savior.handle_product_processes(
-#             id=id, 
-#             process_update=process_update, 
-#             calculate_emissions=process_update.pop("calculate_emissions", False)
-#         )         
-#     elif method == "POST":
-#         response = savior.handle_product_processes(
-#             process_update=request.json
-#         )
-#     return response 
-
-@bp.route("/published-products", methods=["POST"])
-@bp.route("/published-products/<string:product_id>", methods=["DELETE"])
+    return savior.delete_product(product_id=product_id)
+    
+@bp.get("/products/<string:product_id>")
 @savior_route
-def handle_product_publishings(
-    savior: Partner, product_id: str | None = None
-) -> bool:
-    """This endpoint takes a product id handles publishing and unpublishing products"""
-    method = request.method 
-    if method == "POST":
-        response =  savior.publish_product(
-            product_id=request.json["product_id"]
-        )
-    elif method == "DELETE":
-        response = savior.unpublish_product(product_id=product_id)
-    return response
+def get_partner_product(savior: Partner, product_id: str) -> dict:
+    """GET method of saviors/products/<product_id>
+    
+    Retreive a product and all its stages, processes
+    
+    Path args:
+        product_id (str): The product_id of the product to get
+        
+    Returns:
+        a dict with the product to process level data
+    """
+    return savior.get_own_product(product_id=product_id)
 
-
-
-@bp.route("/tasks/<string:task_id>", methods=["GET", "PATCH", "PUT", "DELETE"]) 
-@bp.route("/tasks", methods=["GET", "POST"])
-@savior_route
-def tasks(savior: Partner, task_id: str = None) -> dict | ObjectId | int:
-    """get and create new tasks / todos, basically a todo list endpoint"""
-    tasks = savior.db.tasks
-    method = request.method
-    if method == "GET":
-        if task_id:
-            res = list(tasks.find_one({"_id": ObjectId(task_id)}))
-        else:
-            savior_id = savior.savior_id
-            res = {
-                "pending": tasks.count_documents({
-                    "savior_id": savior_id, "status": "in progress"
-                }),
-                "tasks": list(
-                    tasks.find(
-                        {"savior_id": savior_id}, 
-                        sort=[("status", -1), ("created", -1)]
-                    )
-                )
-            }
-    elif method == "PUT":
-        json = request.json 
-        json.pop("_id")
-        res = tasks.update_one(
-        {"_id": ObjectId(task_id)}, {"$set": request.json}
-    ).upserted_id
-    elif method == "POST":
-        json = request.json 
-        json.pop("_id")
-        savior = savior 
-        res = savior._get_insert(
-            {**request.json, "status": "in progress"}
-        )
-        tasks.insert_one(res)
-    elif method == "PATCH": 
-        res = tasks.update_one(
-            {"_id": ObjectId(task_id)},
-            {"$set": {"status": "complete"}}
-        )
-    elif method == "DELETE":
-        res = tasks.delete_many({"_id": ObjectId(task_id)}).deleted_count
-    return res
-
-@bp.route("/factors/bookmarks/<string:factor_id>", methods=["DELETE", "PATCH"])
-@savior_route
-def handle_factor_bookmars(savior: Partner, factor_id: str) -> str:
-    """Add and remove emission factor bookmarks"""
-    actions = {"PATCH": "$addToSet", "DELETE": "$pull"}
-    accumulator = actions[request.method]
-    return savior.handle_emission_factor(
-        factor_id=factor_id, accumulator=accumulator
+@bp.patch("/products/<string:product_id>")
+@savior_route(success_code=201)
+def update_product(savior: Partner, product_id: str) -> dict:
+    """PATCH method saviors/products/<product_id>
+    
+    Perform product level updates
+    
+    Note that the only editable field is the product name and keywords. 
+    The rest is handled by stage / process specific endpoints.
+    
+    Path args:
+        product_id: The id of the product to get
+        
+    Returns:
+        A dict with the product updates and product_id
+    """
+    return savior.update_product(
+        updates=request.json, product_id=product_id
     )
 
-@bp.get("/emissions")
-@savior_route
-def emissions(savior: Partner) -> list: 
-    """get logged emissions of a savior"""
-    return savior.emissions 
 
+@bp.post("/published-products")
+@savior_route(success_code=201)
+def publish_product(savior: Partner) -> bool:
+    """POST method for /saviors/published-products
+    
+    Publish a product
+    
+    Expected json:
+        product_id (str): The product_id of the product to publish
+    
+    Returns:
+        A boolean denoting whether the product was published
+    """
+    return savior.publish_product(
+        product_id=request.json["product_id"]
+    )
+@bp.delete("/published-products/<string:product_id>")
+@savior_route
+def unpublish_proudct(savior: Partner, product_id: str) ->  bool:
+    """DELETE method for /saviors/published-products/<product_id> endpoint 
+    
+    Unpublish a product
+    
+    Args:
+        product_id (str): The id of the product to delete
+    Path args:
+        product_id: The id of the product to unpublish
+        
+    Returns:
+        A bool denoting whether the product was unpublished
+    """
+    return savior.unpublish_product(product_id=product_id)
+    
+    
+@bp.get("/company-teams")
+@savior_route
+def company_teams(savior: Partner) -> list:
+    """GET method of /saviors/company-teams
+    
+    Returns:
+        A list of the partner's distinct company teams
+    """
+    
+    return savior.db.partners.distinct(
+        "team", { "company_id": savior.savior_id }
+    )
+    
+@bp.get("/company-users")
+@savior_route
+def company_users(savior: Partner) -> list:
+    """GET method of /saviors/company-users 
+    
+    Returns:
+        A list of the partner's distinct company users
+    """
+    return savior.db.partners.distinct(
+        "username", { "company_id": savior.savior_id }
+    )
+    
+@bp.get("/company-tree")
+@savior_route
+def get_company_tree(savior: Partner) -> list:
+    """GET method of /saviors/company-tree
+    
+    Returns:
+        All the accounts created under the company
+     
+    """
+    
+    return list(
+        savior.db.partners.find({"company_id": savior.savior_id}, {"password": 0})
+    )
+    
+@bp.post("/company-tree")
+@savior_route(success_code=201)
+def invite_user(savior: Partner) -> ObjectId:
+    """POST endpoint of /saviors/company-tree 
+    
+    Invite company users
+    
+    Expected json:
+        role: The role of the user
+        username: The user's username
+        email: The user's email, (not the company's email)
+        password: The password of the user's account
+        team (str): Optional. The team to assign the user to
+        
+    Returns:
+        The _id of the created user
+    """
+    account = request.json
+    collection = savior.db.partners
+    company_info = collection.find_one(
+        {"company_id": savior.savior_id, "role": "company"},
+        {"company_id": 1, "company_email": 1, "region": 1, "company": 1, "_id": 0}
+    )
+    return collection.insert_one(
+        {
+            **company_info,
+            "role": account["role"],
+            "password": account["password"],
+            "username": account["username"],
+            "email": account["email"],
+            "joined": datetime.now(tz=timezone.utc),
+            "team": account.get("team", None),
+        }
+    ).inserted_id

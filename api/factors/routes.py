@@ -1,6 +1,6 @@
 from flask import request, Response
 from api.factors.router import bp 
-from root.saviors.partner import Partner
+from root.partner import Partner
 from api.helpers import route, send
 from pymongo import MongoClient
 from api.helpers import savior_route
@@ -9,45 +9,47 @@ from api.helpers import savior_route
 @savior_route(send_return=False)
 def factors(savior: Partner) -> Response:
     """Emission factors search functionality"""
-    search_queries = request.args.to_dict()
-    projection = {"embeddings": 0}
-    sort = {}
-    if "activity" in search_queries:
-        search_queries["$text"] = {"$search": f'\"{search_queries.pop("activity")}\"'}
-        sort = {"$sort": {"relevance": -1}}
-        projection["relevance"] = {"$meta": "textScore"}
-    limit = int(search_queries.pop("limit", 30))
-    skip = int(search_queries.pop("skip", 0))
-    if search_queries.pop("saved", False):
-        search_queries["saved_by"] = savior.savior_id
-    def _get_pipeline():
-        pipeline = [
-            {
-                "$match": {
-                    "$or": [
-                        {"savior_id": savior.savior_id}, 
-                        {"source": {"$nin": ["partners", "users"]}}
-                    ],
-                    **search_queries
-                }
-            }, 
-            {
-                "$project": projection
-            },
-            {"$skip": skip},
-            {"$limit": limit}
-        ]
-        if sort:
-            pipeline.append(sort)
-        return pipeline
-    emission_factors = savior.db.emission_factors
-    result = emission_factors.aggregate(_get_pipeline())
-    max_results = emission_factors.count_documents(search_queries)
-    return send(
-        status=200, 
-        content=list(result), 
-        max_results=max_results
-    )
+    # HAVE TO FIX THIS WHNE SETTING UP FACTORS SEARCH
+    return "hey"
+    # search_queries = request.args.to_dict()
+    # projection = {"embeddings": 0}
+    # sort = {}
+    # if "activity" in search_queries:
+    #     search_queries["$text"] = {"$search": f'\"{search_queries.pop("activity")}\"'}
+    #     sort = {"$sort": {"relevance": -1}}
+    #     projection["relevance"] = {"$meta": "textScore"}
+    # limit = int(search_queries.pop("limit", 30))
+    # skip = int(search_queries.pop("skip", 0))
+    # if search_queries.pop("saved", False):
+    #     search_queries["saved_by"] = savior.savior_id
+    # def _get_pipeline():
+    #     pipeline = [
+    #         {
+    #             "$match": {
+    #                 "$or": [
+    #                     {"savior_id": savior.savior_id}, 
+    #                     {"source": {"$ne": "partners"}}
+    #                 ],
+    #                 **search_queries
+    #             }
+    #         }, 
+    #         {
+    #             "$project": projection
+    #         },
+    #         {"$skip": skip},
+    #         {"$limit": limit}
+    #     ]
+    #     if sort:
+    #         pipeline.append(sort)
+    #     return pipeline
+    # emission_factors = savior.db.emission_factors
+    # result = emission_factors.aggregate(_get_pipeline())
+    # max_results = emission_factors.count_documents(search_queries)
+    # return send(
+    #     status=200, 
+    #     content=list(result), 
+    #     max_results=max_results
+    # )
     
     
 @bp.post("/", strict_slashes=False)
