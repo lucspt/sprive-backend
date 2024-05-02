@@ -172,7 +172,7 @@ class User(Savior):
             find={"product_id": product_id},
             error_message=f"A product with id {product_id} does not exist",
             projection={"_id": 0, "name": 1, "co2e": 1}
-        )
+        )[0]
         if not product_info:
             raise ResourceNotFoundError(
                 f"A product with id {product_id} does not exist"

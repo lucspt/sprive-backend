@@ -63,7 +63,6 @@ def create_account_test(
             **extra_account_data
         }
         res: Response = api.post(endpoint, json=account)
-        print(res, "RES")
         assert res.status_code == 201
         res: dict = decode_response(res)["content"]
         assert res.keys() & account.keys()

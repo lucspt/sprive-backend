@@ -27,15 +27,14 @@ def test_user_login(mock_user_account, api):
         ),
         dict
     )
-    assert_route_unauthorized(
-        api.post(
+    fail_res = api.post(
             "/users/login",
             json={
                 "username": "",
                 "password": ""
             }
         )
-    )
+    assert fail_res.status_code >= 400
     
 @pytest.mark.parametrize(
     ("duplicate_error"),

@@ -1,29 +1,36 @@
 from pytest import fixture
-from root.partner import Partner
-import pandas as pd
 from bson import ObjectId
-import pytest 
 from tests.utils import decode_response, assert_route_successful
+from root.partner import Partner
+import pytest
 
+PRODUCT_NAME = "PRODUCT_ROUTES_TESTING"
+
+@fixture
+def product_post_data(create_file, mock_product_csv):
+    return {
+        "file": create_file(filename="product.csv", data=mock_product_csv),
+        "name": "TESTING123"
+    }
+    
 @fixture(scope="module")
-def savior_id() -> ObjectId:
-    return ObjectId()
-
-PRODUCT_NAME = "test_product_name"
-
-@fixture(scope="module")
-def partner(savior_id) -> Partner:
-    return Partner(savior_id=savior_id, user_id=savior_id)
-
-@fixture(scope="module", autouse=True)
-def mock_product_id(mock_product_csv, partner):
+def mock_product_id(mock_partner_account, mock_product_csv):
+    savior_id = mock_partner_account["_id"]
+    partner = Partner(savior_id=savior_id, user_id=savior_id)
     product_id = partner.create_product(
-        product_data=mock_product_csv,
-        product_name=PRODUCT_NAME
+        product_data=mock_product_csv, product_name="PRODUCT_ROUTES_SETUP"
     )
-    partner.publish_product(product_id=str(product_id))
     yield product_id
     
+def test_products_post(assert_route, partner_auth, product_post_data):
+    assert_route(
+        "/products",
+        "post",
+        partner_auth,
+        ObjectId,
+        data=product_post_data
+    )
+
 MOCK_PROCESS = {
     "activity": "testing",
     "activity_value": 12,
@@ -76,20 +83,6 @@ def test_product_process_delete(assert_route, process_id, partner_auth):
         bool,
     )
 
-def test_products_post(
-    assert_route, partner_auth, create_file, mock_product_csv,
-):
-    assert_route(
-        "/products",
-        "post",
-        partner_auth,
-        ObjectId,
-        data={
-            "file": create_file(filename="product.csv", data=mock_product_csv),
-            "name": "mock_product"
-        }
-    )
-
 def test_product_get(mock_product_id, api):
     assert_route_successful(api.get(f"/products/{mock_product_id}"), dict)
     
@@ -124,14 +117,7 @@ def test_delete_product(
         partner_auth,
         bool,
     )
-    
-@fixture(scope="module", autouse=True)
-def delete_inserted(db, savior_id):
-    yield
-    for collection in ["emission_factors", "products"]:
-        db[collection].delete_many({"savior_id": savior_id})
-    
-    
+
 
 # def test_star_product_post(assert_route, mock_product_id, partner_auth):
 #     assert_route(

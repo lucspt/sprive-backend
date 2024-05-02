@@ -479,6 +479,7 @@ class Partner(Savior):
         products_collection = self.db.products
         
         product_names = products_collection.distinct("name", {"savior_id": savior_id})
+        print(product_name, product_names)
         if product_name in product_names:
             raise ResourceConflictError(
                 "A product with that name has already been created"
@@ -671,6 +672,7 @@ class Partner(Savior):
             find={"product_id": product_id, "savior_id": self.savior_id},
             error_message=f"Product with id {product_id} does not exist",
         )
+        print("HEREEEE ", )
         return bool(
             self.db.products.delete_many(
                 {"product_id": product_id, "savior_id": self.savior_id}
@@ -820,13 +822,15 @@ class Partner(Savior):
         form_postable_fields = ("scope", "category", "unit_type")
         missing_columns, assigns = [], {}
         for required_col in ("activity", "value", "unit", *form_postable_fields):
-            if required_col not in file_df:
+            if not required_col in file_df:
                 if required_col in form_postable_fields:
                     fallback = get_form_field(required_col)
                     if fallback:
                         assigns[required_col] = fallback
                     else:
                         missing_columns.append(required_col)
+                else:
+                    missing_columns.append(required_col)
         if len(missing_columns) > 0:
             raise MissingRequestDataError(
                 f"Missing data fields: {', '.join(missing_columns)}"

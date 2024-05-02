@@ -197,7 +197,9 @@ class Savior:
         Raises:
             ResourceNotFoundError: When no resources are found.
         """
+        print("HEREE")
         resource = list(self.db[collection_name].find(find, projection))
+        print("resousrce here", resource, find)
         if not resource:
             raise ResourceNotFoundError(error_message)
         return resource

@@ -27,12 +27,6 @@ def mock_product_endpoint(mock_product):
 def test_product_get(assert_route, partner_auth, mock_product_endpoint):
     assert_route(mock_product_endpoint, "get", auth=partner_auth, expect=(dict, None))
 
-def test_product_delete(assert_route, partner_auth, mock_product_endpoint, db, mock_product):
-    content = assert_route(mock_product_endpoint, "delete", auth=partner_auth, expect=bool)
-    assert content 
-    assert not db.products.find_one(
-        {"product_id": mock_product}
-    )
     
 def test_products_patch(assert_route, partner_auth, mock_product_endpoint):
     assert_route(
@@ -77,6 +71,11 @@ def test_published_products_delete(partner_auth, assert_route, mock_product):
         partner_auth,
         bool,
     )
+    
+def test_product_delete(assert_route, partner_auth, mock_product_endpoint, db, mock_product):
+    content = assert_route(mock_product_endpoint, "delete", auth=partner_auth, expect=bool)
+    assert content 
+    assert not db.products.find_one({"product_id": mock_product})
     
 def test_company_teams(partner_auth, assert_route):
 #     assert_route("/saviors/company-teams", "post", partner_auth, )
@@ -216,7 +215,7 @@ def test_post_files(
             "unit_type": "weight"
         })
         assert res.status_code >= 400 
-        assert "Missing required columns" in decode_response(res)["content"]
+        assert "Missing data" in decode_response(res)["content"]
     elif form_data_err:
             res = call(data={"form_data": "err"})
             assert res.status_code >= 400

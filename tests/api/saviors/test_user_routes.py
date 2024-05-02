@@ -98,10 +98,9 @@ def mock_product_id(db, mock_partner_account):
     db.emission_factors.delete_one({"_id": _id})
     
     
-def test_star_product(api, assert_route, user_auth, mock_product_id, db):
+def test_star_product(api, assert_route, user_auth, mock_product_id):
     with pytest.raises(Exception):
         api.post("/saviors/stars/fail_product_id", user_auth)
-    print(mock_product_id, "MOCK ID", db.emission_factors.find_one({"product_id": mock_product_id}))
     for method in ["post", "delete"]:
         assert_route(
             f"/saviors/stars/{mock_product_id}",

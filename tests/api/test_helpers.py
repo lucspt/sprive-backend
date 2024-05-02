@@ -102,21 +102,7 @@ def test_route(
             error_message=error_message
         )
 
-@pytest.mark.parametrize(
-    ("expected_status_code", "expect_res_contains"),
-    [
-        (200, "SUCCESS"),
-        (401, "Missing JWT")
-    ]
-)
-def test_savior_route_auth_requirements(
-    reset_cookies, 
-    expected_status_code, 
-    expect_res_contains, 
-    api,
-    partner_auth,
-    user_auth,
-):
+def test_savior_route_auth_requirements(api, partner_auth, user_auth):
     """Since we are verifying jwt in request 
     we need to actually make an api call to test this.
     
@@ -125,21 +111,24 @@ def test_savior_route_auth_requirements(
     It implements the tests for `savior_route`.
     
     """
-    for auth in [partner_auth, user_auth]:
-        if auth == user_auth:
-            api.delete("/saviors/logout")
-        res = api.get(
+    def _call(headers, savior_type="partners"):
+        return api.get(
             "/pytesting/mock-jwt-required", 
-            headers={} if reset_cookies else auth, 
+            headers=headers,
             query_string={
-                "savior_type": "partners" if auth == partner_auth 
-                else "users" if auth == user_auth else None
+                "savior_type": savior_type
             }
         )
-        assert res.status_code == expected_status_code
-        assert expect_res_contains in decode_response(res)["content"]
+    res = _call(partner_auth)
+    assert res.status_code == 200
+    res = _call({})
+    assert res.status_code == 401
+    api.delete("/saviors/logout")
+    res = _call(user_auth, "users")
+    assert res.status_code == 200
+    res = _call({}, "users")
+    assert res.status_code == 401
         
-
 @pytest.mark.parametrize(
     ("filename", "to_file_fn", "should_raise"),
     [

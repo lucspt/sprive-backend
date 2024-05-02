@@ -5,7 +5,7 @@ to return from the api when certain operations fail.
 We catch them in the route decorators found in api/helpers.py.
 """
 
-from typing import Any, override
+from typing import override
 
 class ExceptionWithStatusCode(Exception):
     """Exception with a api response status code
@@ -55,7 +55,7 @@ class ResourceNotFoundError(ExceptionWithStatusCode):
 class InvalidMediaTypeError(ExceptionWithStatusCode):
     """Error for invalid media types
     
-    Raise this error when an invalid file is uploaded
+    Raise this error when an invalid file is uploaded.
     
     Attributes:
         status_code: 415
@@ -66,7 +66,7 @@ class InvalidMediaTypeError(ExceptionWithStatusCode):
         super().__init__(*args, status_code=415)
         
 class MissingRequestDataError(ExceptionWithStatusCode):
-    """Error to raise when a request is missing data
+    """Error to raise when a request is missing data.
     
     Attributes:
         status_code: 400
@@ -80,7 +80,8 @@ class InvalidRequestDataError(ExceptionWithStatusCode):
     Raise this when a request contains invalid data,
     
     For example, a PATCH request tries to modify
-    a field like `joined` the joined date of their account
+    a field like `joined` which is the date of their account
+    creation. 
     
     Attributes:
         status_code: 400
@@ -93,8 +94,8 @@ class ResourceConflictError(ExceptionWithStatusCode):
     """Error for conflicting resources
     
     Raise this when a request tries to create 
-    a resource with data that is already in use,
-    and must be unique.
+    a resource with data that must be unique, 
+    and is already in use.
     
     Example:
         When a partner tries to sign up for an account

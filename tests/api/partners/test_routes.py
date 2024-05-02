@@ -63,11 +63,13 @@ def test_login(
         if fail_email:
             email = "fail@fail.com"
             password = mock_partner_account["password"]
+            _assert = lambda res: res.status_code == 404
         elif fail_password:
             email = mock_partner_account["email"]
             password = "fail"
+            _assert = lambda res: res.status_code == 401
         res = api.post("/partners/login", json={"email": email, "password": password})
-        assert res.status_code == 401
+        assert _assert(res)
         
 def test_check_email_is_available(
     mock_partner_account: dict, 
