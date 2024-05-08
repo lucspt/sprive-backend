@@ -249,6 +249,7 @@ class Partner(Savior):
                         "rating": {"$first": "$rating"},
                         "created_at": {"$first": "$created"},
                         "last_update": {"$first": "$last_update"},
+                        "image": {"$first": "$image"},
                         "name": {"$first": "$name"}
                     }
                 },
@@ -290,6 +291,7 @@ class Partner(Savior):
                     "unit_types": {"$first": "$unit_types"},
                     "activity": {"$first": "$activity"},
                     "stars": {"$first": "$stars"},
+                    "image": {"$first": "$image"},
                     "processes": {"$push": {
                     "_id": "$_id",
                     "process": "$process",
@@ -314,6 +316,7 @@ class Partner(Savior):
                             "last_update": "$last_update",
                         }
                     },
+                    "image": {"$first": "$image"},
                     "co2e": {"$sum": "$co2e"},
                     "published": {"$first": "$published"},
                     "unit_types": {"$first": "$unit_types"},
@@ -336,11 +339,12 @@ class Partner(Savior):
         
         See `get_product` for more
         """
-        return self.get_product(
+        p = self.get_product(
             products_collection=self.db.products,
             product_id=product_id,
             matches={"savior_id": self.savior_id}
         )
+        return p
     
     
     def delete_product_process(self, process_id: str) -> bool:
