@@ -59,6 +59,7 @@ def logs(savior: User | Partner) -> dict | list:
         otherwise a dictionary with fields: logs, has_more
     """
     args = request.args.get
+    print("HERERE")
     return savior.logs(
         limit=int(args("limit", 0)),
         skip=int(args("skip", 0))

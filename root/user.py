@@ -42,7 +42,7 @@ class User(Savior):
     @classmethod
     def skip_limit_cursor(
         self, cursor: Cursor, limit: int, skip: int
-    ) -> dict[str, bool | list]:
+    ) -> tuple[list, bool]:
         """Helper function for paginating when requesting collection inserts
         
         Note: It's likely desired to first sort `cursor` by date,
@@ -54,7 +54,7 @@ class User(Savior):
             skip (int): how many results to skip.
         
         Returns:
-            A tuple with the page results and a a boolean indicating
+            A tuple with the page results and a boolean indicating
             if there are more pages to query
         """
         res = list(
@@ -71,8 +71,9 @@ class User(Savior):
     def logs(self, limit=0, skip=0) -> dict[str, list | bool]:
         """The user's logs, sorted by date"""
         res, has_more = self.skip_limit_cursor(
-            self.db.product_logs.find({"savior_id": self.savior_id})
-            .sort([("created_at", -1)]),
+            self.db.product_logs.find(
+                {"savior_id": self.savior_id}
+            ).sort([("created_at", -1)]),
             skip=skip,
             limit=limit
         )
@@ -171,7 +172,7 @@ class User(Savior):
             collection_name="emission_factors",
             find={"product_id": product_id},
             error_message=f"A product with id {product_id} does not exist",
-            projection={"_id": 0, "name": 1, "co2e": 1}
+            projection={"_id": 0, "name": 1, "co2e": 1, "image": 1}
         )[0]
         if not product_info:
             raise ResourceNotFoundError(
@@ -251,6 +252,7 @@ class User(Savior):
         Returns:
             An int of how many times the user has logged a product.
         """
+        print("HERERERE", self.string_to_date(since_date))
         return self.db.product_logs.count_documents( 
             {
              "savior_id": self.savior_id,

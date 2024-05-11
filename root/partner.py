@@ -339,12 +339,11 @@ class Partner(Savior):
         
         See `get_product` for more
         """
-        p = self.get_product(
+        return self.get_product(
             products_collection=self.db.products,
             product_id=product_id,
             matches={"savior_id": self.savior_id}
         )
-        return p
     
     
     def delete_product_process(self, process_id: str) -> bool:
@@ -362,7 +361,7 @@ class Partner(Savior):
     @staticmethod
     def calculate_emissions() -> dict[str, int]:
         import random
-        return {"co2e": random.randint(0, 5)}
+        return {"co2e": random.randint(2, 10)}
     
     @classmethod
     def protect_process_request(self, process: dict | set):
@@ -498,7 +497,7 @@ class Partner(Savior):
         now = datetime.now(tz=timezone.utc)
         import random 
         for doc in product_data:
-            co2e = random.randint(0, 4)
+            co2e = random.randint(1, 10)
             doc.update(
                 {
                     "product_id": product_id, 
@@ -571,6 +570,7 @@ class Partner(Savior):
                         "_id": None,
                         "co2e": {"$sum": "$co2e"},
                         "activity": {"$first": "$name"},
+                        "image": {"$first": "$image"},
                         "name": {"$first": "$name"},
                     },
                 },
@@ -581,7 +581,7 @@ class Partner(Savior):
                         "activity": 1,
                         "name": 1,
                         "source": "partners",
-                        "image": None,
+                        "image": 1,
                         "rating": None,
                         "last_update": now,
                         "created_at": now,
@@ -637,9 +637,11 @@ class Partner(Savior):
             ResourceNotFoundError: When the product does not exist
             ResourceConflictError: When the product name has been taken by the same partner
         """
+        print("EHRERERE1111")
         self.protect_request_fields(
             requested_fields=updates, allowed_fields={"name", "keywords"}
         )
+        print("EHRERERE")
         savior_id, products = self.savior_id, self.db.products
         products_created = products.distinct(
             "name", {"savior_id": savior_id}

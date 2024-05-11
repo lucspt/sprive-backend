@@ -150,6 +150,7 @@ def search_products(client: MongoClient) -> dict[str, bool | list]:
             "last_update": 1,
             "product_id": 1,
             "rating": 1,
+            "image": 1,
         }
     )
 

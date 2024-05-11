@@ -59,7 +59,6 @@ def upload_file(savior: Partner) -> Response:
     Returns:
         The id of the file uploaded
     """
-    print("HEREEE")
     get_file = request.files.get
     file = get_file("file[]") or get_file("file")
     filename = file.filename
