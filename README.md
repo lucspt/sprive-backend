@@ -1,4 +1,4 @@
-### Sprive Backend
+# Sprive Backend
 
 This repository holds the backend code that powers all of my Sprive applications:
 
